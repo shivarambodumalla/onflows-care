@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v chromium-cli)",
+      "Bash(command -v npx)",
+      "Bash(node -e \"console.log\\(require.resolve\\('playwright'\\)\\)\")",
+      "Bash(npm root *)",
+      "Read(//Applications/Google Chrome.app/**)",
+      "Read(//Users/siva/Library/Caches/ms-playwright/**)",
+      "Read(//Applications/**)",
+      "Bash(npm init *)",
+      "Bash(npm i *)",
+      "Bash(node drive.mjs)",
+      "Bash(sed -i '' \"s/chromium.launch\\(\\)/chromium.launch\\({ channel: 'chrome' }\\)/\" drive.mjs)",
+      "Bash(git -c user.name=siva -c user.email=ux.siva@gmail.com commit -q -m ' *)"
+    ]
+  }
+}

@@ -161,7 +161,9 @@ export function buildSeed(): Database {
       phone: '+91 80 4123 5566',
       opensAt: '09:00',
       closesAt: '19:00',
-      closedDays: [0],
+      // Open seven days. Deliberate: the demo must never open on a dead
+      // dashboard just because someone happened to look at it on a Sunday.
+      closedDays: [],
       active: true,
     },
     {
@@ -522,7 +524,14 @@ export function buildSeed(): Database {
   const treatments: Treatment[] = []
   let appointmentIndex = 0
 
-  /** Books one appointment on `day` at a slot, returning the record. */
+  /**
+   * Books one appointment on `day`, always inside the branch's opening hours.
+   *
+   * Today's statuses fall out of comparing the slot to the real clock, so a
+   * demo opened at 2pm shows a live clinic and one opened at 9pm shows a day
+   * that has finished — which is the truth, rather than inventing 11pm slots
+   * to keep the screen busy.
+   */
   const book = (day: Date, patient: Patient): Appointment | null => {
     const branch = branches.find((b) => b.id === patient.branchId)!
     if (branch.closedDays.includes(day.getDay())) return null
@@ -545,6 +554,10 @@ export function buildSeed(): Database {
       ? addMinutes(start, -random.int(5, 25)).toISOString()
       : addDays(start, -random.int(1, 21)).toISOString()
 
+    // The clerk who took the booking works at that branch.
+    const branchReception = receptionists.filter((r) => r.branchIds.includes(branch.id))
+    const bookedBy = random.pick(branchReception.length > 0 ? branchReception : receptionists)
+
     const appointment: Appointment = {
       id: `apt_${(appointmentIndex++).toString(36).padStart(4, '0')}`,
       patientId: patient.id,
@@ -558,7 +571,7 @@ export function buildSeed(): Database {
       reason: random.chance(0.4)
         ? random.pick(['Persistent pain', 'Routine review', 'New complaint', 'Package session', 'Post-injury check'])
         : undefined,
-      createdById: walkIn ? random.pick(receptionists).id : random.pick(receptionists).id,
+      createdById: bookedBy.id,
       createdAt,
     }
 
@@ -572,15 +585,18 @@ export function buildSeed(): Database {
   for (let offset = -HISTORY_DAYS; offset <= FUTURE_DAYS; offset++) {
     const day = addDays(today, offset)
     const weekday = day.getDay()
-    if (weekday === 0) continue // both branches closed Sunday
 
-    // Busier midweek, quieter Saturdays; today deliberately busy for demos.
-    let volume = weekday === 6 ? random.int(3, 7) : random.int(7, 14)
-    if (offset === 0) volume = random.int(11, 15)
+    // Busier midweek, quieter at weekends. `book()` drops anything landing on
+    // a day its branch is closed, so Sundays naturally fall to Indiranagar.
+    let volume =
+      weekday === 0 ? random.int(4, 8) : weekday === 6 ? random.int(5, 9) : random.int(7, 14)
+    // Today is always busy — the dashboard is the first thing anyone sees.
+    if (offset === 0) volume = random.int(14, 19)
     if (offset > 14) volume = random.int(2, 5) // the far future is only partly booked
 
     for (let n = 0; n < volume; n++) {
       const patient = random.pick(activePatients)
+
       const appointment = book(day, patient)
       if (!appointment) continue
 
