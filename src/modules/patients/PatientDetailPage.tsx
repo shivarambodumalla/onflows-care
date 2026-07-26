@@ -8,8 +8,10 @@ import {
   Paperclip,
   Pencil,
   Phone,
+  Pill,
   Pin,
   PlusCircle,
+  Printer,
   Stethoscope,
   Trash2,
   Upload,
@@ -61,6 +63,15 @@ import {
 } from '@/lib/dates'
 import { LEAD_SOURCE_LABELS } from '@/data/types'
 import { eventIcon, eventTone } from '@/modules/timeline/eventPresentation'
+import { EventDetail, hasDetail } from '@/modules/timeline/EventDetail'
+import {
+  AddPrescriptionDrawer,
+  PrescriptionSummaryLine,
+  PrescriptionTable,
+} from '@/modules/treatments/prescription'
+import { PrescriptionPrint } from '@/modules/treatments/PrescriptionPrint'
+import { markPrescriptionIssued } from '@/data/actions'
+import type { Treatment } from '@/data/types'
 import { ArchivePatientDialog } from './ArchivePatientDialog'
 import { BookAppointmentDrawer } from '@/modules/appointments/BookAppointmentDrawer'
 import { RecordTreatmentDrawer } from '@/modules/treatments/RecordTreatmentDrawer'
@@ -88,6 +99,10 @@ export function PatientDetailPage() {
   const [recording, setRecording] = useState(false)
   const [editing, setEditing] = useState(false)
   const [noteBody, setNoteBody] = useState('')
+  const [prescribing, setPrescribing] = useState<string | undefined>(undefined)
+  const [prescribeOpen, setPrescribeOpen] = useState(false)
+  const [printing, setPrinting] = useState<Treatment | null>(null)
+  const [openEvents, setOpenEvents] = useState<Record<string, boolean>>({})
 
   const tab = (params.get('tab') as Tab) ?? 'timeline'
   const setTab = (next: Tab) => {
@@ -130,6 +145,7 @@ export function PatientDetailPage() {
   const last = lastVisit(db, patient.id)
   const openFollowUps = reminders.filter((r) => r.status === 'pending' || r.status === 'snoozed')
   const canSeeClinical = allows('patients.viewClinical')
+  const lastPrescribed = treatments.find((t) => t.prescription.length > 0)
   const lifetimeValue = treatments.reduce(
     (sum, t) => sum + (treatmentTypeById(db, t.treatmentTypeId)?.price ?? 0),
     0,
@@ -186,6 +202,18 @@ export function PatientDetailPage() {
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {allows('treatments.prescribe') && treatments.length > 0 && (
+              <Button
+                variant="secondary"
+                icon={<Pill />}
+                onClick={() => {
+                  setPrescribing(undefined)
+                  setPrescribeOpen(true)
+                }}
+              >
+                Prescribe
+              </Button>
+            )}
             {allows('treatments.create') && patient.status === 'active' && (
               <Button variant="secondary" icon={<Stethoscope />} onClick={() => setRecording(true)}>
                 Record visit
@@ -249,6 +277,42 @@ export function PatientDetailPage() {
           />
           <Glance label="Total visits" value={String(treatments.length)} />
         </div>
+
+        {/* The current prescription, readable without opening the record —
+            the question a doctor asks most often about a returning patient. */}
+        {canSeeClinical && lastPrescribed && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-default bg-surface-sunken px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-2xs font-semibold tracking-wider text-subtle uppercase">
+                Current prescription · {formatDate(lastPrescribed.performedAt)}
+              </p>
+              <PrescriptionSummaryLine items={lastPrescribed.prescription} max={3} className="mt-0.5" />
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Printer />}
+                onClick={() => setPrinting(lastPrescribed)}
+              >
+                Print
+              </Button>
+              {allows('treatments.prescribe') && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Pill />}
+                  onClick={() => {
+                    setPrescribing(lastPrescribed.id)
+                    setPrescribeOpen(true)
+                  }}
+                >
+                  Add
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -277,27 +341,78 @@ export function PatientDetailPage() {
                   />
                 ) : (
                   <Timeline>
-                    {events.map((event, i) => (
-                      <TimelineItem
-                        key={event.id}
-                        id={event.id}
-                        icon={eventIcon(event)}
-                        tone={eventTone(event)}
-                        title={event.summary}
-                        description={`by ${userById(db, event.actorId)?.name ?? 'System'}`}
-                        timestamp={formatRelativeTime(event.at)}
-                        isLast={i === events.length - 1}
-                        meta={
-                          event.changes && event.changes.length > 0 ? (
-                            <span className="text-2xs text-subtle">
-                              {event.changes
-                                .map((c) => `${c.field}: ${c.from ?? '—'} → ${c.to ?? '—'}`)
-                                .join(' · ')}
-                            </span>
-                          ) : undefined
-                        }
-                      />
-                    ))}
+                    {events.map((event, i) => {
+                      const detailed = hasDetail(event, db)
+                      // Visits carry the substance of the record, so they open
+                      // by default — a clinician scanning the history should
+                      // not have to click to find out what was done.
+                      const expanded =
+                        openEvents[event.id] ?? (event.entity === 'treatment' && i < 3)
+                      const treatment =
+                        event.entity === 'treatment'
+                          ? db.treatments.find((t) => t.id === event.entityId)
+                          : undefined
+
+                      return (
+                        <TimelineItem
+                          key={event.id}
+                          id={event.id}
+                          icon={eventIcon(event)}
+                          tone={eventTone(event)}
+                          title={event.summary}
+                          description={`by ${userById(db, event.actorId)?.name ?? 'System'}`}
+                          timestamp={formatRelativeTime(event.at)}
+                          isLast={i === events.length - 1}
+                          body={
+                            detailed && expanded ? <EventDetail event={event} /> : undefined
+                          }
+                          meta={
+                            <>
+                              {detailed && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setOpenEvents((current) => ({
+                                      ...current,
+                                      [event.id]: !expanded,
+                                    }))
+                                  }
+                                  className="cursor-pointer rounded text-2xs font-medium text-brand hover:underline"
+                                >
+                                  {expanded ? 'Hide detail' : 'Show detail'}
+                                </button>
+                              )}
+
+                              {treatment && treatment.prescription.length > 0 && (
+                                <>
+                                  {!expanded && (
+                                    <PrescriptionSummaryLine items={treatment.prescription} />
+                                  )}
+                                  {canSeeClinical && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrinting(treatment)}
+                                      className="inline-flex cursor-pointer items-center gap-1 rounded text-2xs font-medium text-brand hover:underline"
+                                    >
+                                      <Printer aria-hidden className="size-3" />
+                                      Print prescription
+                                    </button>
+                                  )}
+                                </>
+                              )}
+
+                              {event.changes && event.changes.length > 0 && (
+                                <span className="text-2xs text-subtle">
+                                  {event.changes
+                                    .map((c) => `${c.field}: ${c.from ?? '—'} → ${c.to ?? '—'}`)
+                                    .join(' · ')}
+                                </span>
+                              )}
+                            </>
+                          }
+                        />
+                      )
+                    })}
                   </Timeline>
                 )}
               </Card>
@@ -346,11 +461,36 @@ export function PatientDetailPage() {
                               {userById(db, treatment.doctorId)?.name}
                             </p>
                           </div>
-                          {treatment.nextVisitInDays && (
-                            <Badge tone="info" size="sm">
-                              Next visit in {treatment.nextVisitInDays}d
-                            </Badge>
-                          )}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {treatment.nextVisitInDays && (
+                              <Badge tone="info" size="sm">
+                                Next visit in {treatment.nextVisitInDays}d
+                              </Badge>
+                            )}
+                            {canSeeClinical && treatment.prescription.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                icon={<Printer />}
+                                onClick={() => setPrinting(treatment)}
+                              >
+                                Print
+                              </Button>
+                            )}
+                            {allows('treatments.prescribe') && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={<Pill />}
+                                onClick={() => {
+                                  setPrescribing(treatment.id)
+                                  setPrescribeOpen(true)
+                                }}
+                              >
+                                Prescribe
+                              </Button>
+                            )}
+                          </div>
                         </div>
 
                         {canSeeClinical ? (
@@ -370,24 +510,7 @@ export function PatientDetailPage() {
                             {treatment.prescription.length > 0 && (
                               <div>
                                 <SectionTitle>Prescription</SectionTitle>
-                                <ul className="flex flex-col gap-1">
-                                  {treatment.prescription.map((rx) => (
-                                    <li
-                                      key={rx.id}
-                                      className="flex flex-wrap items-baseline gap-x-2 rounded-lg bg-surface-sunken px-2.5 py-1.5"
-                                    >
-                                      <span className="font-medium">{rx.medication}</span>
-                                      <span className="text-xs text-muted">
-                                        {rx.dosage} · {rx.frequency} · {rx.durationDays} days
-                                      </span>
-                                      {rx.instructions && (
-                                        <span className="w-full text-2xs text-subtle">
-                                          {rx.instructions}
-                                        </span>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
+                                <PrescriptionTable items={treatment.prescription} />
                               </div>
                             )}
                             {treatment.doctorNotes && (
@@ -715,6 +838,25 @@ export function PatientDetailPage() {
         patientId={patient.id}
       />
       <EditPatientDrawer open={editing} onClose={() => setEditing(false)} patient={patient} />
+
+      <AddPrescriptionDrawer
+        open={prescribeOpen}
+        onClose={() => setPrescribeOpen(false)}
+        patientId={patient.id}
+        treatmentId={prescribing}
+      />
+
+      {printing && (
+        <PrescriptionPrint
+          treatment={printing}
+          onDone={() => {
+            // Printing is the moment the prescription is handed over, so it
+            // belongs on the timeline.
+            apply((db) => markPrescriptionIssued(db, ctx, printing.id))
+            setPrinting(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -420,6 +420,156 @@
   }
 }
 
+/* --- Printable prescription (Part 8) --------------------------------------
+   Hidden on screen; the only thing the printer sees. Always light-on-white
+   regardless of the app theme — a dark-mode prescription wastes toner and is
+   unreadable on paper. */
+.print-sheet {
+  display: none;
+}
+
+@media print {
+  /* Everything except the sheet is hidden rather than removed, so layout
+     measurement stays stable while the dialog opens. */
+  body > *:not(.print-sheet) {
+    display: none !important;
+  }
+
+  .print-sheet {
+    display: block;
+    position: absolute;
+    inset: 0;
+    padding: 18mm 16mm;
+    background: #fff;
+    color: #111;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+
+  .print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #0f766e;
+    padding-bottom: 8pt;
+  }
+  .print-brand {
+    font-size: 17pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #0f766e;
+  }
+  .print-sub {
+    font-size: 9pt;
+    color: #555;
+  }
+  .print-branch {
+    text-align: right;
+    font-size: 9pt;
+    color: #555;
+  }
+
+  .print-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12pt;
+    margin-top: 12pt;
+    padding-bottom: 10pt;
+    border-bottom: 1px solid #ddd;
+  }
+  .print-label {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #777;
+  }
+  .print-value {
+    font-size: 12pt;
+    font-weight: 600;
+  }
+  .print-small {
+    font-size: 9pt;
+    color: #555;
+  }
+
+  .print-allergies {
+    margin-top: 10pt;
+    padding: 6pt 8pt;
+    border: 1pt solid #b91c1c;
+    color: #b91c1c;
+    font-size: 10pt;
+    border-radius: 3pt;
+  }
+
+  .print-rx {
+    margin-top: 14pt;
+    font-size: 22pt;
+    font-weight: 700;
+    color: #0f766e;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 6pt;
+  }
+  .print-table th {
+    text-align: left;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #555;
+    border-bottom: 1pt solid #333;
+    padding: 5pt 4pt;
+  }
+  .print-table td {
+    padding: 7pt 4pt;
+    border-bottom: 0.5pt solid #ddd;
+    vertical-align: top;
+  }
+  .print-instructions {
+    font-size: 9pt;
+    color: #555;
+    font-style: italic;
+  }
+
+  .print-next {
+    margin-top: 12pt;
+    font-size: 10pt;
+  }
+
+  .print-footer {
+    position: absolute;
+    bottom: 18mm;
+    left: 16mm;
+    right: 16mm;
+  }
+  .print-sign {
+    width: 60mm;
+    margin-left: auto;
+    text-align: center;
+  }
+  .print-sign-line {
+    border-top: 1pt solid #333;
+    margin-bottom: 4pt;
+  }
+  .print-disclaimer {
+    margin-top: 10pt;
+    padding-top: 6pt;
+    border-top: 0.5pt solid #ddd;
+    font-size: 7.5pt;
+    color: #888;
+    text-align: center;
+  }
+
+  @page {
+    margin: 0;
+    size: A4;
+  }
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;

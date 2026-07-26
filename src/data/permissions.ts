@@ -140,7 +140,19 @@ const ADMIN: Permission[] = [
   'settings.resetDemoData',
 ]
 
-const OWNER: Permission[] = [...ADMIN, 'users.manageRoles']
+/**
+ * The owner persona is a practising clinician who also runs the business, so
+ * they hold the clinical permissions on top of everything an admin can do.
+ * Admin is deliberately *not* clinical: system administration is not a licence
+ * to prescribe.
+ */
+const OWNER: Permission[] = [
+  ...ADMIN,
+  'users.manageRoles',
+  'treatments.create',
+  'treatments.edit',
+  'treatments.prescribe',
+]
 
 const MATRIX: Record<Role, ReadonlySet<Permission>> = {
   owner: new Set(OWNER),
@@ -163,8 +175,17 @@ export function permissionsFor(role: Role): Permission[] {
   return [...MATRIX[role]].sort()
 }
 
-/** Every permission in the system, for rendering the full matrix. */
-export const ALL_PERMISSIONS: Permission[] = [...new Set(OWNER)].sort()
+/**
+ * Every permission in the system, for rendering the full matrix.
+ *
+ * Built from the union across *all* roles, not from the owner's set: a
+ * permission held only by a non-owner role (clinical ones, before the owner
+ * gained them) would otherwise vanish from the matrix entirely, quietly
+ * under-reporting what the product can do.
+ */
+export const ALL_PERMISSIONS: Permission[] = [
+  ...new Set(Object.values(MATRIX).flatMap((set) => [...set])),
+].sort()
 
 /**
  * Roles restricted to the branches on their user record. Owners and admins

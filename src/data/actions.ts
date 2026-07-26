@@ -581,6 +581,58 @@ export function recordTreatment(
   return [reconcile(next), treatment]
 }
 
+/**
+ * Appends medications to an existing visit record.
+ *
+ * Prescribing is the doctor's highest-frequency action, and forcing it back
+ * through the full visit drawer is the single biggest source of friction in
+ * their day. This is the quick path: same clinical record, same audit trail,
+ * one field.
+ */
+export function addPrescription(
+  db: Database,
+  ctx: Ctx,
+  treatmentId: ID,
+  items: PrescriptionItem[],
+): Database {
+  const treatment = db.treatments.find((t) => t.id === treatmentId)
+  if (!treatment || items.length === 0) return db
+
+  let next: Database = {
+    ...db,
+    treatments: replace(db.treatments, treatmentId, {
+      prescription: [...treatment.prescription, ...items],
+    }),
+  }
+  next = emit(next, ctx, {
+    entity: 'treatment',
+    entityId: treatmentId,
+    action: 'prescribed',
+    summary: `Prescribed ${items.map((i) => i.medication).join(', ')} for ${nameOf(db, treatment.patientId)}`,
+    patientId: treatment.patientId,
+    branchId: treatment.branchId,
+    // Adding medication to a clinical record is an amendment, so it is audited.
+    audit: true,
+  })
+  return next
+}
+
+/** Records that a prescription was printed and handed over. */
+export function markPrescriptionIssued(db: Database, ctx: Ctx, treatmentId: ID): Database {
+  const treatment = db.treatments.find((t) => t.id === treatmentId)
+  if (!treatment) return db
+
+  return emit(db, ctx, {
+    entity: 'treatment',
+    entityId: treatmentId,
+    action: 'prescription_issued',
+    summary: `Prescription printed for ${nameOf(db, treatment.patientId)}`,
+    patientId: treatment.patientId,
+    branchId: treatment.branchId,
+    audit: false,
+  })
+}
+
 export function updateTreatment(
   db: Database,
   ctx: Ctx,

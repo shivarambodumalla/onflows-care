@@ -12,7 +12,13 @@
       "Bash(npm i *)",
       "Bash(node drive.mjs)",
       "Bash(sed -i '' \"s/chromium.launch\\(\\)/chromium.launch\\({ channel: 'chrome' }\\)/\" drive.mjs)",
-      "Bash(git -c user.name=siva -c user.email=ux.siva@gmail.com commit -q -m ' *)"
+      "Bash(git -c user.name=siva -c user.email=ux.siva@gmail.com commit -q -m ' *)",
+      "Bash(node /private/tmp/claude-501/-Users-siva-work-HMS/6e5584f0-eb1b-418a-a474-45c7c8f0f6a6/scratchpad/matrix.mjs)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/onflows-care/)",
+      "Bash(lsof -ti:5173)",
+      "Bash(echo \"PID $\\(lsof -ti:5173\\) listening on 5173\")",
+      "Bash(node rx.mjs)",
+      "Bash(gh auth *)"
     ]
   }
 }

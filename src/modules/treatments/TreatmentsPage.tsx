@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Pill, Search, Stethoscope, X } from 'lucide-react'
+import { Pill, Printer, Search, Stethoscope, X } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -12,10 +12,13 @@ import {
   type Column,
 } from '@/design-system'
 import { PatientCell, formatMoney } from '@/components/common'
-import { useApp } from '@/data/store'
+import { useApp, useCtx } from '@/data/store'
 import { doctorsIn, patientById, treatmentTypeById, userById } from '@/data/selectors'
 import { formatDate, formatRelativeDay } from '@/lib/dates'
 import type { Treatment } from '@/data/types'
+import { markPrescriptionIssued } from '@/data/actions'
+import { PrescriptionSummaryLine } from './prescription'
+import { PrescriptionPrint } from './PrescriptionPrint'
 
 type Range = '7' | '30' | '90' | 'all'
 
@@ -26,13 +29,15 @@ type Range = '7' | '30' | '90' | 'all'
  * ledger a doctor or manager uses to review what was actually done.
  */
 export function TreatmentsPage() {
-  const { db, branch, role, user, allows } = useApp()
+  const { db, branch, role, user, allows, apply } = useApp()
+  const ctx = useCtx()
   const navigate = useNavigate()
 
   const [query, setQuery] = useState('')
   const [doctorFilter, setDoctorFilter] = useState(role === 'doctor' ? user.id : '')
   const [typeFilter, setTypeFilter] = useState('')
   const [range, setRange] = useState<Range>('30')
+  const [printing, setPrinting] = useState<Treatment | null>(null)
 
   const canSeeClinical = allows('patients.viewClinical')
 
@@ -123,20 +128,21 @@ export function TreatmentsPage() {
       },
       {
         key: 'rx',
-        header: 'Rx',
-        align: 'center',
-        width: 'w-14',
+        header: 'Prescription',
+        width: 'w-56',
+        // Shown in full rather than as a count: reviewing what was prescribed
+        // is the reason a doctor opens this ledger, and a number sends them
+        // into every row to find out.
         cell: (treatment) =>
-          treatment.prescription.length > 0 ? (
-            <span
-              className="inline-flex items-center gap-0.5 text-xs text-muted"
-              title={`${treatment.prescription.length} medications prescribed`}
-            >
-              <Pill aria-hidden className="size-3" />
-              {treatment.prescription.length}
-            </span>
-          ) : (
+          treatment.prescription.length === 0 ? (
             <span className="text-subtle">—</span>
+          ) : canSeeClinical ? (
+            <PrescriptionSummaryLine items={treatment.prescription} />
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs text-subtle">
+              <Pill aria-hidden className="size-3" />
+              {treatment.prescription.length} medications
+            </span>
           ),
       },
       {
@@ -258,7 +264,30 @@ export function TreatmentsPage() {
             </Button>
           ),
         }}
+        rowActions={(treatment) =>
+          canSeeClinical && treatment.prescription.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Print prescription"
+              title="Print prescription"
+              onClick={() => setPrinting(treatment)}
+            >
+              <Printer className="size-4" />
+            </Button>
+          ) : null
+        }
       />
+
+      {printing && (
+        <PrescriptionPrint
+          treatment={printing}
+          onDone={() => {
+            apply((db) => markPrescriptionIssued(db, ctx, printing.id))
+            setPrinting(null)
+          }}
+        />
+      )}
     </div>
   )
 }
